@@ -2,15 +2,16 @@
 import math
 import time
 from datetime import datetime
-import pandas_market_calendars as mcal
 from urllib.parse import urlencode
 
 import finplot as fplt
 import pandas as pd
 import requests
-import tqdm
-
+import exchange_calendars as xcals
 import config
+from tqdm import tqdm, trange
+
+nys = xcals.get_calendar("XNYS")  # New York Stock Exchange
 
 
 def cumcnt_indices(v):
@@ -32,18 +33,25 @@ def update():
     # load data
     # limit = 500
     start_time = int(time.time() * 1000) - (500 - 2) * 60 * 1000
-    start = datetime.fromtimestamp(start_time / 1000).strftime('%Y-%m-%d %H:%M:%S%z')
+    start = datetime.fromtimestamp(start_time / 1000).strftime('%Y-%m-%d')
     print(start)
     # check if market is open now and if not wait until it opens
-    nyse = mcal.get_calendar('NYSE')
-    nyse.valid_days(start_date=start, end_date=datetime.now())
-    # while not datetime.now() in valid_days:
-    #     time.sleep(60)
-    #     start_time = int(time.time() * 1000) - (500 - 2) * 60 * 1000
-    #     start = datetime.fromtimestamp(start_time / 1000).strftime('%Y-%m-%d HH:%M')
-    #     valid_days = nyse.valid_days(start_date=start, end_date=start)
-    # else:
-    #     start = datetime.fromtimestamp(start_time / 1000).strftime('%Y-%m-%d')
+    # seconds to open
+
+    while not nys.is_session(start):
+        seconds_to_open = nys.next_open(datetime.now()).timestamp() - datetime.now().timestamp()
+        minutes_to_open = seconds_to_open / 60
+        start_time = int(time.time() * 1000) - (500 - 2) * 60 * 1000
+        start = datetime.fromtimestamp(start_time / 1000).strftime('%Y-%m-%d')
+        if seconds_to_open > 0:
+            print('Market is closed. Waiting until it opens.', f'{minutes_to_open:.0f} minutes to go.')
+            with tqdm(total=100) as pbar:  # progress bar
+                for i in range(100):  # 100 steps
+                    time.sleep(seconds_to_open / 100)
+                    pbar.update(1)
+    else:
+        start = datetime.fromtimestamp(start_time / 1000).strftime('%Y-%m-%d')
+        print(start, 'market is open, loading data')
     """
     Get data from Tiingo API
     Returns a numpy array of the 1min close prices for 1 day
