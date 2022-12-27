@@ -69,7 +69,7 @@ def update():
         'token': API_KEY
     }
     url = TIINGO_BATCH_API + urlencode(params)
-    print(url)
+    # print(url)
     response = requests.get(url).json()
     df = pd.DataFrame(response, columns='date open close high low volume'.split())
     df = df.astype(
