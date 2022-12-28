@@ -4,12 +4,14 @@ import time
 from datetime import datetime
 from urllib.parse import urlencode
 
+import exchange_calendars as xcals
 import finplot as fplt
 import pandas as pd
 import requests
-import exchange_calendars as xcals
+from pyti import relative_strength_index as rsi
+from tqdm import tqdm
+
 import config
-from tqdm import tqdm, trange
 
 nys = xcals.get_calendar("XNYS")  # New York Stock Exchange
 
@@ -80,11 +82,15 @@ def update():
     df['tdup'] = [('%i' % i if 0 < i < 10 else '') for i in tdup]
     df['tddn'] = [('%i' % i if 0 < i < 10 else '') for i in tddn]
 
+    df['rsi'] = rsi.relative_strength_index(df['close'], 14)
+
+
     # pick columns for our three data sources: candlesticks and TD sequencial labels for up/down
     candlesticks = df['date open close high low'.split()]
     volumes = df['date open close volume'.split()]
     td_up_labels = df['date high tdup'.split()]
     td_dn_labels = df['date low tddn'.split()]
+    rsi_labels = df['date high rsi'.split()]
     if not plots:
         # first time we create the plots
         try:
@@ -93,6 +99,11 @@ def update():
             plots.append(fplt.volume_ocv(volumes, ax=ax.overlay()))
             plots.append(fplt.labels(td_up_labels, color='#009900'))
             plots.append(fplt.labels(td_dn_labels, color='#990000', anchor=(0.5, 0)))
+            # add rsi line plot as subplot at the bottom with 2 axes
+            ax2 = ax.subplot()
+            ax2.set_visible(True)
+            plots.append(fplt.plot(rsi_labels, ax=ax2, color='#000099'))
+
         except Exception as e:
             print(e)
     else:
@@ -102,6 +113,7 @@ def update():
             plots[1].update_data(volumes)
             plots[2].update_data(td_up_labels)
             plots[3].update_data(td_dn_labels)
+            plots[4].update_data(rsi_labels)
         except Exception as e:
             print(e)
 
