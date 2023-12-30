@@ -16,22 +16,21 @@
    https://github.com/highfestiva/finplot/blob/master/finplot/examples/complicated.py
    '''
 
-import finplot as fplt
-from functools import lru_cache
 import json
+from functools import lru_cache
 from math import nan
-import pandas as pd
-from PyQt6.QtWidgets import QComboBox, QCheckBox, QWidget, QGridLayout
-import pyqtgraph as pg
-import requests
-from time import time as now, sleep
 from threading import Thread
-import websocket
-import numpy as np
+from time import time as now, sleep
 
 import bayesloop as bl
+import finplot as fplt
+import numpy as np
+import pandas as pd
+import pyqtgraph as pg
+import requests
 import sympy.stats as stats
-import math
+import websocket
+from PyQt6.QtWidgets import QComboBox, QCheckBox, QWidget, QGridLayout
 
 # sigma as a rolling standard deviation of log returns
 sigma = 0.006  # np.sqrt(390) * pd.Series(logReturns).rolling(20).std()
@@ -40,14 +39,15 @@ S = bl.OnlineStudy(storeHistory=True)
 L = bl.om.ScaledAR1('rho', bl.oint(-1, 1, 100),
                     'sigma', bl.oint(0, sigma, 800))
 T1 = bl.tm.CombinedTransitionModel(
-        bl.tm.GaussianRandomWalk('s1', bl.cint(0, 1.5e-01, 15), target='rho',
-                                 prior=stats.Exponential('expon', 1. / 3.0e-02)),
-        bl.tm.GaussianRandomWalk('s2', bl.cint(0, 1.5e-04, 50), target='sigma')
-    )
+    bl.tm.GaussianRandomWalk('s1', bl.cint(0, 1.5e-01, 15), target='rho',
+                             prior=stats.Exponential('expon', 1. / 3.0e-02)),
+    bl.tm.GaussianRandomWalk('s2', bl.cint(0, 1.5e-04, 50), target='sigma')
+)
 T2 = bl.tm.Independent()
 
 S.add('normal', T1)
 S.add('chaotic', T2)
+
 
 class BinanceFutureWebsocket:
     def __init__(self):
@@ -239,13 +239,8 @@ def calc_volatility(df):
     for i in range(len(logReturns)):
         S.set(L)
     try:
-        for i in range(len(logReturns)):
-            S.update(logReturns[i])
-    except:
-        pass
-    try:
         prior = (len(logReturns) - 1) / len(logReturns), 1 / len(logReturns)
-    except:
+    except ZeroDivisionError:
         prior = 0, 1
     S.setTransitionModelPrior([prior])
 
@@ -276,7 +271,7 @@ def calc_plot_data(df, indicators):
         rsi = calc_rsi(df.Close)
         stoch, stoch_s = calc_stochastic_oscillator(df)
         volatility = calc_volatility(df)
-    plot_data = dict(price=price, volume=volume, ma50=ma50, ma200=ma200, vema24=vema24, sar=sar, rsi=rsi, \
+    plot_data = dict(price=price, volume=volume, ma50=ma50, ma200=ma200, vema24=vema24, sar=sar, rsi=rsi,
                      stoch=stoch, stoch_s=stoch_s)
     # for price line
     last_close = price.iloc[-1].Close

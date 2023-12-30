@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 import numpy as np
 import bayesloop as bl
@@ -28,51 +29,30 @@ def log_returns(df):  # return log returns of prices
     return logReturns
 
 
-def data_to_array(dataframe):  # return array of close prices
-    df = dataframe.filter(['close'])
-    df.close = df.close.astype(float)
+def data_to_array(df: pd.DataFrame):  # return array of close prices
+    df.filter(items=['close']).astype(float)
     # df = df.close[1:].values
-    prices = np.array(df)
-    return prices
+    close_prices = np.array(df)
+    return close_prices
 
 
 # function to calculate log standard deviation of returns (volatility)
-# for prices using a rolling window x minutes wide, 1 day = 390 minutes
-def rolling_log_std(prices, x=389):
+# for prices using a rolling window x minutes wide, 1 day = 390 minutes (389 steps)
+def rolling_log_std(prices, x=None):
     logReturns = log_returns(prices)
+    if x > len(logReturns):
+        x = len(logReturns)
+    elif len(logReturns) <= 389:
+        x = 389
     logReturns = logReturns[-x:]
     return log_std(logReturns)
 
 
-def create_bayesian_study(close_prices):
-    len_prices = len(close_prices)
-    lg_returns = rolling_log_std(close_prices, x=len_prices)
-    try:
-        sigma = log_std(close_prices)
-    except:
-        sigma = 0.006
-    S = bl.OnlineStudy(storeHistory=True)
-    L = bl.om.ScaledAR1('rho', bl.oint(-1, 1, 100),
-                        'sigma', bl.oint(0, sigma, 800))
-    S.set(L)
-
-    T1 = bl.tm.CombinedTransitionModel(
-        bl.tm.GaussianRandomWalk('s1', bl.cint(0, 1.5e-01, 15), target='rho',
-                                 prior=stats.Exponential('expon', 1. / 3.0e-02)),
-        bl.tm.GaussianRandomWalk('s2', bl.cint(0, 1.5e-04, 50), target='sigma')
-    )
-    T2 = bl.tm.Independent()
-    S.add('normal', T1)
-    S.add('chaotic', T2)
-    #  1 news announcement per day
-    S.setTransitionModelPrior([(len_prices - 1) / len_prices, 1 / len_prices])
-    for r in tqdm_notebook(lg_returns):
-        S.step(r)
-
-    return r, sigma
+async def create_bayesian_study(prices):
+    pass
 
 
-def get_data(symbol):
+async def get_data(symbol):
     """
     Get data from Tiingo API
     Returns a numpy array of the 1min close prices for 1 day
@@ -82,15 +62,16 @@ def get_data(symbol):
     TIINGO_BATCH_API = "https://api.tiingo.com/iex/{}/prices?".format(symbol)
     params = {
         'columns': 'date,open,high,low,close,volume',
-        'startDate': (datetime.today() - timedelta(days=2)).strftime('%Y-%m-%d'),
+        'startDate': (datetime.today() - timedelta(days=1)).strftime('%Y-%m-%d'),
         'endDate': (datetime.today() - timedelta(days=1)).strftime('%Y-%m-%d'),
         'resampleFreq': '1min',
         'token': API_KEY
     }
     url = TIINGO_BATCH_API + urlencode(params)
-    with aiohttp.ClientSession() as session:
+    print(url)
+    async with aiohttp.ClientSession() as session:
         with session.get(url) as response:
-            json_response = response.json()
+            json_response = await response.json()
             try:
                 df = pd.DataFrame(json_response)
                 df.set_index('date', inplace=True)
@@ -101,15 +82,43 @@ def get_data(symbol):
             except Exception as e:
                 print(e)
                 return pd.DataFrame()
-
-    return df
     # df = df.filter(['close'])
     # df.close = df.close.astype(float)
     # df = df.close[1:].values
 
 
-if __name__ == '__main__':
+async def main():
     data = get_data(symbol=config.STOCK_SYMBOL)
     prices = data_to_array(data)
-    create_bayesian_study(prices)
-    # get points
+    # init bayesloop
+    S = bl.OnlineStudy(storeHistory=True)
+    L = bl.om.ScaledAR1('rho', bl.oint(-1, 1, 100),
+                        'sigma', bl.oint(0, 0.006, 800))
+    S.set(L)
+
+    T1 = bl.tm.CombinedTransitionModel(
+        bl.tm.GaussianRandomWalk('s1', bl.cint(0, 1.5e-01, 15), target='rho',
+                                 prior=stats.Exponential('expon', 1. / 3.0e-02)),
+        bl.tm.GaussianRandomWalk('s2', bl.cint(0, 1.5e-04, 50), target='sigma')
+    )
+    T2 = bl.tm.Independent()
+    S.add('normal', T1)
+    S.add('chaotic', T2)
+    len_prices = len(prices)
+    lg_returns = rolling_log_std(prices, x=len_prices)
+
+    # new_sigma = log_std(prices)
+    #  1 news announcement per day
+    S.setTransitionModelPrior([(len_prices - 1) / len_prices, 1 / len_prices])
+    for r in tqdm_notebook(lg_returns):
+        S.step(r)
+
+    # extract parameter grid values (rho) and corresponding prob. values (p)
+    rho, p = S.getParameterDistributions('rho')
+
+    return rho, p
+
+
+if __name__ == '__main__':
+    rho, p = asyncio.run(main())
+    print('rho: ', rho, 'p:', p)  # , 'sigma: ', sigma)

@@ -84,8 +84,7 @@ def update():
 
     df['rsi'] = rsi.relative_strength_index(df['close'], 14)
 
-
-    # pick columns for our three data sources: candlesticks and TD sequencial labels for up/down
+    # pick columns for our three data sources: candlesticks and TD sequential labels for up/down
     candlesticks = df['date open close high low'.split()]
     volumes = df['date open close volume'.split()]
     td_up_labels = df['date high tdup'.split()]
@@ -101,7 +100,7 @@ def update():
             plots.append(fplt.labels(td_dn_labels, color='#990000', anchor=(0.5, 0)))
             # add rsi line plot as subplot at the bottom with 2 axes
             ax2 = ax.subplot()
-            ax2.set_visible(True)
+            ax2.set_visible(False)
             plots.append(fplt.plot(rsi_labels, ax=ax2, color='#000099'))
 
         except Exception as e:
